@@ -7,6 +7,7 @@ const http = require("http");
 const WebSocket = require("ws");
 const connectDB = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
+const goalRoutes = require("./routes/goalRoutes");
 
 const app = express();
 const server = http.createServer(app); // Crear servidor HTTP
@@ -53,6 +54,7 @@ app.use(morgan("dev"));
 
 // Rutas
 app.use("/api/auth", authRoutes);
+app.use("/api/goals", goalRoutes);
 
 const PORT = process.env.PORT || 5000;
 
