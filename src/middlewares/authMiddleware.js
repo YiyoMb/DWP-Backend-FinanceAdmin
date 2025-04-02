@@ -20,7 +20,6 @@ const protect = async (req, res, next) => {
 
                 // Buscar el usuario en la base de datos sin incluir la contraseña
                 const user = await User.findById(decoded.userId).select("-password");
-                console.log("ID decodificado del token:", decoded.id);
 
                 if (!user) {
                     return res.status(401).json({ message: "Usuario no encontrado" });
