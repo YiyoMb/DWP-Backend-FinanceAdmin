@@ -1,4 +1,5 @@
-require("dotenv").config({ path: "../.env" });
+//require("dotenv").config({ path: "../.env" }); //ruta para desarrollo
+require("dotenv").config(); //ruta para producción
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
