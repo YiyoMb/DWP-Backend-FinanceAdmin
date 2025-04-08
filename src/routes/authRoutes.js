@@ -4,6 +4,8 @@ const {
     login,
     enableMFA,
     verifyMFA,
+    verifySetupMFA,
+    disableMFA,
     forgotPassword,
     resetPassword
 } = require("../controllers/authController");
@@ -16,8 +18,10 @@ router.post("/login", login);
 router.post("/forgot-password", forgotPassword);
 router.post("/reset-password/:token", resetPassword);
 
-//Rutas protegidas
-router.post("/enable-mfa", protect, enableMFA);
-router.post("/verify-mfa", protect, verifyMFA);
+//Rutas protegidas para MFA
+router.post("/verify-mfa", verifyMFA);
+router.get("/enable-mfa", protect, enableMFA);
+router.post("/verify-setup-mfa", protect, verifySetupMFA);
+router.post("/disable-mfa", protect, disableMFA);
 
 module.exports = router;

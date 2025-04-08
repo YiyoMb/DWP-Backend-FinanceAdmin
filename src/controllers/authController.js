@@ -44,35 +44,22 @@ exports.login = async (req, res) => {
             return res.json({ mfaRequired: true });
         }
 
-        // Si no tiene MFA, le enviamos el token de acceso directamente
+        // Generamos el token
         const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
-        res.json({ token });
+
+        // Convertimos el objeto user a JSON y eliminamos la contraseña
+        const userData = user.toObject();
+        delete userData.password;
+
+        // Enviamos el token junto con los datos del usuario
+        res.json({ token, user: userData });
 
     } catch (error) {
         res.status(500).json({ message: "Error en el servidor", error });
     }
 };
 
-exports.enableMFA = async (req, res) => {
-    const userId = req.user.id; // ID del usuario autenticado
-
-    try {
-        // Generar clave secreta única
-        const secret = speakeasy.generateSecret({ name: "MiApp" });
-
-        // Guardar la clave en la base de datos
-        await User.findByIdAndUpdate(userId, { mfaSecret: secret.base32 });
-
-        // Generar QR Code para Google Authenticator
-        const qrDataURL = await qrcode.toDataURL(secret.otpauth_url);
-
-        return res.json({ qrCode: qrDataURL });
-    } catch (error) {
-        console.error("❌ Error al habilitar MFA:", error);
-        return res.status(500).json({ message: "Error interno del servidor" });
-    }
-};
-
+// Verificar el código MFA al iniciar sesión
 exports.verifyMFA = async (req, res) => {
     const { email, token } = req.body;
 
@@ -82,22 +69,130 @@ exports.verifyMFA = async (req, res) => {
             return res.status(401).json({ message: "Usuario no encontrado" });
         }
 
+        // Verificar que el usuario tenga MFA habilitado
+        if (!user.mfaEnabled || !user.mfaSecret) {
+            return res.status(400).json({ message: "MFA no está habilitado para este usuario" });
+        }
+
+        // Verificar el código TOTP
         const verified = speakeasy.totp.verify({
             secret: user.mfaSecret,
             encoding: "base32",
             token,
+            window: 1 // Tolerancia de 1 intervalo (30 segundos antes/después)
         });
 
         if (!verified) {
             return res.status(401).json({ message: "Código MFA incorrecto" });
         }
 
-        // Ahora sí, enviamos el token de sesión
+        // Generar y devolver token JWT
         const authToken = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
         res.json({ token: authToken });
 
     } catch (error) {
-        res.status(500).json({ message: "Error en el servidor", error });
+        console.error("Error en verificación MFA:", error);
+        res.status(500).json({ message: "Error en el servidor", error: error.message });
+    }
+};
+
+// Endpoint para verificar el código MFA durante la configuración inicial
+exports.verifySetupMFA = async (req, res) => {
+    try {
+        const userId = req.user.id; // Obtenido del middleware de autenticación
+        const { token } = req.body;
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: "Usuario no encontrado" });
+        }
+
+        // Verificar el código TOTP
+        const verified = speakeasy.totp.verify({
+            secret: user.mfaSecret,
+            encoding: "base32",
+            token,
+            window: 1
+        });
+
+        if (!verified) {
+            return res.status(401).json({ message: "Código MFA incorrecto" });
+        }
+
+        // Activar MFA para el usuario
+        await User.findByIdAndUpdate(userId, { mfaEnabled: true });
+
+        res.json({ message: "MFA activado correctamente" });
+    } catch (error) {
+        console.error("Error al verificar configuración MFA:", error);
+        res.status(500).json({ message: "Error en el servidor", error: error.message });
+    }
+};
+
+// Modificar el método enableMFA para solo generar y devolver el QR
+exports.enableMFA = async (req, res) => {
+    try {
+        const userId = req.user.id; // ID del usuario autenticado
+        const user = await User.findById(userId);
+
+        if (!user) {
+            return res.status(404).json({ message: "Usuario no encontrado" });
+        }
+
+        // Si el usuario ya tiene MFA habilitado
+        if (user.mfaEnabled) {
+            return res.status(400).json({ message: "MFA ya está habilitado para este usuario" });
+        }
+
+        // Generar clave secreta única
+        const secret = speakeasy.generateSecret({
+            name: `MiApp:${user.email}`,  // Formato recomendado para apps de autenticación
+            issuer: "MiApp"
+        });
+
+        // Guardar la clave en la base de datos (pero MFA aún no está habilitado)
+        await User.findByIdAndUpdate(userId, {
+            mfaSecret: secret.base32,
+            mfaEnabled: false  // Se activará después de la verificación
+        });
+
+        // Generar QR Code para Google Authenticator
+        const qrDataURL = await qrcode.toDataURL(secret.otpauth_url);
+
+        return res.json({ qrCode: qrDataURL });
+    } catch (error) {
+        console.error("Error al generar código QR para MFA:", error);
+        return res.status(500).json({ message: "Error interno del servidor", error: error.message });
+    }
+};
+
+// Deshabilitar MFA
+exports.disableMFA = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { password } = req.body;
+
+        // Verificar la contraseña antes de desactivar MFA (medida de seguridad adicional)
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: "Usuario no encontrado" });
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(401).json({ message: "Contraseña incorrecta" });
+        }
+
+        // Desactivar MFA
+        await User.findByIdAndUpdate(userId, {
+            mfaEnabled: false,
+            mfaSecret: null
+        });
+
+        res.json({ message: "MFA desactivado correctamente" });
+    } catch (error) {
+        console.error("Error al desactivar MFA:", error);
+        res.status(500).json({ message: "Error en el servidor", error: error.message });
     }
 };
 
