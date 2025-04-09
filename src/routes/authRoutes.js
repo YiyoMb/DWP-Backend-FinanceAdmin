@@ -2,6 +2,7 @@ const express = require("express");
 const {
     register,
     login,
+    getUser,
     enableMFA,
     verifyMFA,
     verifySetupMFA,
@@ -19,6 +20,7 @@ router.post("/forgot-password", forgotPassword);
 router.post("/reset-password/:token", resetPassword);
 
 //Rutas protegidas para MFA
+router.get('/user', protect, getUser);
 router.post("/verify-mfa", verifyMFA);
 router.get("/enable-mfa", protect, enableMFA);
 router.post("/verify-setup-mfa", protect, verifySetupMFA);

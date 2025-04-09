@@ -59,6 +59,20 @@ exports.login = async (req, res) => {
     }
 };
 
+// Obtener el usuario actual autenticado
+exports.getUser = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id).select('-password -mfaSecret -resetPasswordToken -resetPasswordExpires');
+        if (!user) {
+            return res.status(404).json({ message: "Usuario no encontrado" });
+        }
+        res.json(user);
+    } catch (error) {
+        console.error("Error al obtener usuario:", error);
+        res.status(500).json({ message: "Error en el servidor", error: error.message });
+    }
+};
+
 // Verificar el código MFA al iniciar sesión
 exports.verifyMFA = async (req, res) => {
     const { email, token } = req.body;
